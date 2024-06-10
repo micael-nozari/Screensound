@@ -1,12 +1,12 @@
-﻿using ScreenSound.Menus;
+﻿using Microsoft.EntityFrameworkCore;
+using ScreenSound.Banco;
+using ScreenSound.Menus;
 using ScreenSound.Modelos;
 
-Artista ira = new Artista("Ira!", "Banda Ira!");
-Artista beatles = new("The Beatles", "Banda The Beatles");
+var context = new ScreenSoundContext();
 
-Dictionary<string, Artista> artistasRegistrados = new();
-artistasRegistrados.Add(ira.Nome, ira);
-artistasRegistrados.Add(beatles.Nome, beatles);
+
+var DAL = new DAL<Artista>(context);
 
 Dictionary<int, Menu> opcoes = new();
 opcoes.Add(1, new MenuRegistrarArtista());
@@ -40,17 +40,24 @@ void ExibirOpcoesDoMenu()
 
     Console.Write("\nDigite a sua opção: ");
     string opcaoEscolhida = Console.ReadLine()!;
-    int opcaoEscolhidaNumerica = int.Parse(opcaoEscolhida);
-
-    if (opcoes.ContainsKey(opcaoEscolhidaNumerica))
-    {
-        Menu menuASerExibido = opcoes[opcaoEscolhidaNumerica];
-        menuASerExibido.Executar(artistasRegistrados);
-        if (opcaoEscolhidaNumerica > 0) ExibirOpcoesDoMenu();
-    } 
-    else
+    
+    int opcaoEscolhidaNumerica = 0;
+    if (!Int32.TryParse(opcaoEscolhida, out opcaoEscolhidaNumerica))
     {
         Console.WriteLine("Opção inválida");
+    }
+    else
+    {
+        if (opcoes.ContainsKey(opcaoEscolhidaNumerica))
+        {
+            Menu menuASerExibido = opcoes[opcaoEscolhidaNumerica];
+            menuASerExibido.Executar(DAL);
+            if (opcaoEscolhidaNumerica > 0) ExibirOpcoesDoMenu();
+        }
+        else
+        {
+            Console.WriteLine("Opção inválida");
+        }
     }
 }
 
