@@ -1,9 +1,12 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using ScreenSound.API.Requests;
 using ScreenSound.API.Response;
+using ScreenSound.API.Responses;
 using ScreenSound.Banco;
 using ScreenSound.Modelos;
+using ScreenSound.Shared.Dados.Modelos;
 using System.Runtime.CompilerServices;
+using System.Security.Claims;
 
 namespace ScreenSound.API.Endpoints
 {
@@ -16,20 +19,25 @@ namespace ScreenSound.API.Endpoints
 
         private static ArtistaResponse EntityToResponse(Artista artista)
         {
-            return new ArtistaResponse(artista.Id, artista.Nome, artista.Bio, artista.FotoPerfil);
+            return new ArtistaResponse(artista.Id, artista.Nome, artista.Bio, artista.FotoPerfil)
+            {
+                Classificacao = artista.Avaliacoes.Select(a => a.Nota).DefaultIfEmpty(0).Average()
+            };
         }
 
 
         public static void AddEndpointsArtistas(this WebApplication app)
         {
-            app.MapGet("/Artistas", ([FromServices] DAL<Artista> dal) =>
+            var groupBuilder = app.MapGroup("artistas").RequireAuthorization().WithTags("Artistas");
+
+            groupBuilder.MapGet("", ([FromServices] DAL<Artista> dal) =>
             {
                 var artistas = dal.Listar();
 
                 return Results.Ok(EntityListToResponseList(artistas));
             });
 
-            app.MapGet("/Artistas/{nome}", ([FromServices] DAL<Artista> dal, string nome) =>
+            groupBuilder.MapGet("{nome}", ([FromServices] DAL<Artista> dal, string nome) =>
             {
                 var artista = dal.RecuperarPor(a => a.Nome.ToUpper().Equals(nome.ToUpper()));
                 if (artista is null)
@@ -40,7 +48,7 @@ namespace ScreenSound.API.Endpoints
                 return Results.Ok(EntityToResponse(artista));
             });
 
-            app.MapPost("/Artistas", async ([FromServices]IHostEnvironment env, [FromServices] DAL<Artista> dal, [FromBody] ArtistaRequest artistaRequest) =>
+            groupBuilder.MapPost("", async ([FromServices]IHostEnvironment env, [FromServices] DAL<Artista> dal, [FromBody] ArtistaRequest artistaRequest) =>
             {
                 string? imagemArtista = null;
                 if (!string.IsNullOrWhiteSpace(artistaRequest.fotoPerfil))
@@ -65,7 +73,7 @@ namespace ScreenSound.API.Endpoints
                 return Results.Ok();
             });
 
-            app.MapDelete("/Artistas/{id}", ([FromServices] DAL<Artista> dal, int id) =>
+            groupBuilder.MapDelete("{id}", ([FromServices] DAL<Artista> dal, int id) =>
             {
                 var artista = dal.RecuperarPor(a => a.Id == id);
                 if (artista is null)
@@ -77,7 +85,7 @@ namespace ScreenSound.API.Endpoints
                 return Results.Ok();
             });
 
-            app.MapPut("/Artistas/", ([FromServices] DAL<Artista> dal, [FromBody] ArtistaRequestEdit artistaRequestEdit) =>
+            groupBuilder.MapPut("", ([FromServices] DAL<Artista> dal, [FromBody] ArtistaRequestEdit artistaRequestEdit) =>
             {
                 var artistaAtualizar = dal.RecuperarPor(a => a.Id == artistaRequestEdit.Id);
                 if (artistaAtualizar is null)
@@ -92,6 +100,62 @@ namespace ScreenSound.API.Endpoints
                 return Results.Ok();
             });
 
+
+            groupBuilder.MapPost("avaliacao", (
+                [FromServices] DAL<Artista> dalArtista, 
+                [FromServices] DAL<PessoaComAcesso> dalPessoa, 
+                [FromBody]AvaliacaoArtistaRequest request, 
+                HttpContext context) =>
+            {
+                var artista = dalArtista.RecuperarPor(a => a.Id == request.ArtistaId);
+                if(artista is null) 
+                    return Results.NotFound();
+
+                var email = context.User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value ?? throw new InvalidOperationException("Pessoa não está conectada") ;
+                var pessoa = dalPessoa.RecuperarPor(p => p.Email.Equals(email)) ?? throw new InvalidOperationException("Pessoa não está conectada");
+
+                var avaliacao = artista.Avaliacoes.FirstOrDefault(a => a.PessoaId == pessoa.Id);
+                if(avaliacao is null)
+                {
+                    artista.AdicionarNota(pessoa.Id, request.nota);
+                }
+                else
+                {
+                    avaliacao.Nota = request.nota;
+                }
+
+                dalArtista.Atualizar(artista);
+
+                return Results.Created();
+            });
+
+            groupBuilder.MapGet("{id}/avaliacao", (
+                int id,
+                HttpContext context,
+                [FromServices] DAL<Artista> dalArtista,
+                [FromServices] DAL<PessoaComAcesso> dalPessoa
+                ) =>
+            {
+                var artista = dalArtista.RecuperarPor(a => a.Id == id);
+                if (artista is null) 
+                    return Results.NotFound();
+                
+                var email = context.User.Claims
+                    .FirstOrDefault(c => c.Type.Equals(ClaimTypes.Email))?.Value
+                    ?? throw new InvalidOperationException("Não foi encontrado o email da pessoa logada");
+
+                var pessoa = dalPessoa.RecuperarPor(p => p.Email!.Equals(email))
+                    ?? throw new InvalidOperationException("Não foi encontrado o email da pessoa logada");
+
+                var avaliacao = artista
+                    .Avaliacoes
+                    .FirstOrDefault(a => a.ArtistaId == id && a.PessoaId == pessoa.Id);
+
+                if (avaliacao is null) 
+                    return Results.Ok(new AvaliacaoArtistaResponse(id, 0));
+                else 
+                    return Results.Ok(new AvaliacaoArtistaResponse(id, avaliacao.Nota));
+            });
         }
     }
 }

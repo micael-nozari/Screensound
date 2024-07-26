@@ -2,12 +2,13 @@
 @inject ArtistaAPI artistaAPI
 @inject NavigationManager navigationManager
 @inject IDialogService DialogService
+@inject ISnackbar Snackbar
 
 <MudPaper Class="px-8 pt-2 pb-4 mx-12 my-8" Justify="Justify.Center">
 
     <MudText Class="mt-8" Typo="Typo.h4">Edição de Artista</MudText>
 
-    <MudForm>
+    <MudForm @ref="form" @bind-IsValid="@success" @bind-Errors="@errors">
 
         <MudTextField Class="mt-4" T="string" Placeholder="Nome do Artista"
                       Variant="Variant.Outlined"
@@ -23,24 +24,32 @@
                       RequiredError="Campo obrigatório." />
 
         <div class="d-flex align-center justify-space-between mt-4">
-            <MudButton Variant="Variant.Filled"
-                       Color="Color.Primary"
-                       Class="ml-auto"
-                       @onclick="Editar">
-                Salvar
-            </MudButton>
-            <MudButton Variant="Variant.Filled"
-                       @onclick="Deletar"
-                       Color="Color.Secondary"
-                       Class="ml-3">
-                Deletar
-            </MudButton>
-            <MudButton Variant="Variant.Filled"
-                       Color="Color.Info"
-                       Class="ml-3"
-                       @onclick="VoltarParaListagem">
-                Voltar
-            </MudButton>
+
+            <MudRating @bind-SelectedValue="Classificacao"
+                       @onclick="AvaliarArtista" />
+
+            <div>
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           Disabled="@(!success)"
+                           Class="ml-auto"
+                           @onclick="Editar">
+                    Salvar
+                </MudButton>
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Warning"
+                           Class="ml-3"
+                           @onclick="Deletar">
+                    Excluir
+                </MudButton>
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Info"
+                           Class="ml-3"
+                           @onclick="VoltarParaListagem">
+                    Voltar
+                </MudButton>
+            </div>
+
         </div>
 
     </MudForm>
@@ -48,8 +57,12 @@
 
 
 @code {
+    bool success;
+    string[] errors = { };
+    MudForm? form;
     private string? nome;
     private string? bio;
+    private int Classificacao;
     [Parameter]
     public string? NomeArtista { get; set; }
 
@@ -58,6 +71,11 @@
     protected async override Task OnInitializedAsync()
     {
         Artista = await artistaAPI!.GetArtistaPorNomeAsync(NomeArtista!);
+        if (Artista is null)
+        {
+            Snackbar.Add("Artista consultado não encontrado.", Severity.Error);
+            navigationManager.NavigateTo("/Artistas");
+        }
         nome = Artista!.Nome;
         bio = Artista!.Bio;
     }
@@ -72,6 +90,7 @@
         if (result != null)
         {
             await artistaAPI.DeleteArtistaAsync(Artista!.Id);
+            Snackbar.Add("Artista excluído com sucesso!", Severity.Success);
             navigationManager.NavigateTo("/Artistas");
         }
     }
@@ -80,11 +99,22 @@
     {
         var requestEdit = new ArtistaRequestEdit(Artista!.Id, nome!, bio!, string.Empty);
         await artistaAPI.UpdateArtistaAsync(requestEdit);
+        Snackbar.Add("Artista atualizado com sucesso!", Severity.Success);
         navigationManager.NavigateTo("/Artistas");
     }
 
     private void VoltarParaListagem()
     {
         navigationManager.NavigateTo("/Artistas");
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        Artista = await artistaAPI.GetArtistaPorNomeAsync(NomeArtista!);
+    }
+
+    private async Task AvaliarArtista()
+    {
+        await artistaAPI!.AvaliaArtistaAsync(Artista!.Id, Classificacao);
     }
 }
