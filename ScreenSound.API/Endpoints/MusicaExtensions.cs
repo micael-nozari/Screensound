@@ -21,14 +21,16 @@ namespace ScreenSound.API.Endpoints
 
         public static void AddEndpointsMusicas(this WebApplication app)
         {
-            app.MapGet("/Musicas", ([FromServices] DAL<Musica> dal) =>
+            var groupBuilder = app.MapGroup("musicas").RequireAuthorization().WithTags("Músicas");
+
+            groupBuilder.MapGet("", ([FromServices] DAL<Musica> dal) =>
             {
                 var musicas = dal.Listar();
 
                 return Results.Ok(EntityListToResponseList(musicas));
             });
 
-            app.MapGet("/Musicas/{nome}", ([FromServices] DAL<Musica> dal, string nome) =>
+            groupBuilder.MapGet("{nome}", ([FromServices] DAL<Musica> dal, string nome) =>
             {
                 var musica = dal.RecuperarPor(a => a.Nome.ToUpper().Equals(nome.ToUpper()));
                 if (musica is null)
@@ -39,7 +41,7 @@ namespace ScreenSound.API.Endpoints
 
             });
 
-            app.MapPost("/Musicas", ([FromServices] DAL<Musica> dal, [FromServices] DAL<Genero> dalGenero, [FromBody] MusicaRequest musicaRequest) =>
+            groupBuilder.MapPost("", ([FromServices] DAL<Musica> dal, [FromServices] DAL<Genero> dalGenero, [FromBody] MusicaRequest musicaRequest) =>
             {
                 var musica = new Musica(musicaRequest.nome) 
                 {                     
@@ -52,7 +54,7 @@ namespace ScreenSound.API.Endpoints
                 return Results.Ok();
             });
 
-            app.MapDelete("/Musicas/{id}", ([FromServices] DAL<Musica> dal, int id) => {
+            groupBuilder.MapDelete("{id}", ([FromServices] DAL<Musica> dal, int id) => {
                 var musica = dal.RecuperarPor(a => a.Id == id);
                 if (musica is null)
                 {
@@ -63,7 +65,7 @@ namespace ScreenSound.API.Endpoints
 
             });
 
-            app.MapPut("/Musicas", ([FromServices] DAL<Musica> dal, [FromBody] MusicaRequestEdit musicaRequest) => {
+            groupBuilder.MapPut("", ([FromServices] DAL<Musica> dal, [FromBody] MusicaRequestEdit musicaRequest) => {
                 var musicaAAtualizar = dal.RecuperarPor(a => a.Id == musicaRequest.Id);
                 if (musicaAAtualizar is null)
                 {
